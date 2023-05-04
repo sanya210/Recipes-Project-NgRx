@@ -1,9 +1,10 @@
 import { HttpClient } from "@angular/common/http";
-import { Actions, ofType } from "@ngrx/effects";
-import { catchError, map, switchMap } from "rxjs/operators";
+import { Actions, ofType, createEffect } from "@ngrx/effects";
+import { catchError, map, switchMap, tap } from "rxjs/operators";
 import * as AuthActions from './auth.actions';
 import { of } from "rxjs";
 import { Injectable } from "@angular/core";
+import { Router } from "@angular/router";
 
 export interface AuthResponseData{
     idToken: string;
@@ -19,26 +20,48 @@ export interface AuthResponseData{
 // NgRx effects will automatically dispatch action 
 @Injectable()
 export class AuthEffects {
-    authLogin = this.actions$.pipe(ofType( AuthActions.LOGIN_START),
-    switchMap((authData: AuthActions.LoginStart) => {
-        return this.http.post<AuthResponseData>('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAV5JJl59VwYNY0SOcEgW12hJ1sXqhaKn0',
-        {
-            email: authData.payload.email,
-            password: authData.payload.password,
-            returnSecureToken: true
-        }
-        ).pipe(
-            map(resData => {
-                const expirationDate = new Date(new Date().getTime() + +resData.expiresIn*1000);
-                return of(new AuthActions.Login({email: resData.email, userId: resData.localId, token: resData.idToken, expirationDate: expirationDate}));
-            },
-            catchError(error => {
-            // return non-error obsv so overall stream doesn't die
-           return of();
-        }) 
-        ));
-    })
-    );
+    constructor(private actions$: Actions, private http: HttpClient, private router: Router){}
 
-    constructor(private actions$: Actions, private http: HttpClient){}
-}
+    authLogin = 
+   createEffect(() => this.actions$.pipe(ofType( AuthActions.LOGIN_START),
+   switchMap((authData: AuthActions.LoginStart) => {
+       return this.http.post<AuthResponseData>('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyAV5JJl59VwYNY0SOcEgW12hJ1sXqhaKn0',
+       {
+           email: authData.payload.email,
+           password: authData.payload.password,
+           returnSecureToken: true
+       }
+       ).pipe(
+           map(resData => {
+               const expirationDate = new Date(new Date().getTime() + +resData.expiresIn*1000);
+               return new AuthActions.Login({email: resData.email, userId: resData.localId, token: resData.idToken, expirationDate: expirationDate});
+           }),
+           catchError(errorRes => {
+            let errorMessage = 'An unknown error occurred!';
+            if (!errorRes.error || !errorRes.error.error) {
+              return of(new AuthActions.LoginFail(errorMessage));
+            }
+            switch (errorRes.error.error.message) {
+              case 'EMAIL_EXISTS':
+                errorMessage = 'This email exists already';
+                break;
+              case 'EMAIL_NOT_FOUND':
+                errorMessage = 'This email does not exist.';
+                break;
+              case 'INVALID_PASSWORD':
+                errorMessage = 'This password is not correct.';
+                break;
+            }
+            return of(new AuthActions.LoginFail(errorMessage));
+          }) 
+       )})
+   ),{dispatch:true});
+
+   authSuccess = createEffect(()=>this.actions$.pipe(
+    ofType(AuthActions.LOGIN),
+    tap(() => {
+      this.router.navigate(['/']);
+    })
+  ),{dispatch: false});
+   }
+    
