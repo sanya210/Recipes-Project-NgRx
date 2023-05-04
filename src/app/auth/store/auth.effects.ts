@@ -1,7 +1,9 @@
 import { HttpClient } from "@angular/common/http";
 import { Actions, ofType } from "@ngrx/effects";
-import { switchMap } from "rxjs/operators";
+import { catchError, map, switchMap } from "rxjs/operators";
 import * as AuthActions from './auth.actions';
+import { of } from "rxjs";
+import { Injectable } from "@angular/core";
 
 export interface AuthResponseData{
     idToken: string;
@@ -14,6 +16,8 @@ export interface AuthResponseData{
 
 
 //Actions is obs that give access to all dispatched actions, allows to even dispatch more actions (like async)
+// NgRx effects will automatically dispatch action 
+@Injectable()
 export class AuthEffects {
     authLogin = this.actions$.pipe(ofType( AuthActions.LOGIN_START),
     switchMap((authData: AuthActions.LoginStart) => {
@@ -22,7 +26,17 @@ export class AuthEffects {
             email: authData.payload.email,
             password: authData.payload.password,
             returnSecureToken: true
-        })
+        }
+        ).pipe(
+            map(resData => {
+                const expirationDate = new Date(new Date().getTime() + +resData.expiresIn*1000);
+                return of(new AuthActions.Login({email: resData.email, userId: resData.localId, token: resData.idToken, expirationDate: expirationDate}));
+            },
+            catchError(error => {
+            // return non-error obsv so overall stream doesn't die
+           return of();
+        }) 
+        ));
     })
     );
 

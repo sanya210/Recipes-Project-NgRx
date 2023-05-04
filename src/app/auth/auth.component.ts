@@ -1,4 +1,4 @@
-import { Component } from "@angular/core";
+import { Component, OnInit } from "@angular/core";
 import { NgForm } from "@angular/forms";
 import { AuthResponseData, AuthService } from "./auth.service";
 import { Observable } from "rxjs";
@@ -6,13 +6,16 @@ import { Router } from "@angular/router";
 import { DataStorageService } from "../shared/data-storage.service";
 import { Recipe } from "../recipes/recipe.model";
 import { RecipeService } from "../recipes/recipe.service";
+import * as fromApp from '../store/app.reducer';
+import { Store } from "@ngrx/store";
+import * as AuthActions from '../auth/store/auth.actions';
 
 @Component({
     selector: 'app-auth',
     templateUrl: './auth.component.html'
 
 })
-export class AuthComponent{
+export class AuthComponent implements OnInit{
     isLoginMode = true;
     isLoading = false;
     allRecipes: Recipe[];
@@ -20,8 +23,15 @@ export class AuthComponent{
     constructor(private authService:AuthService,
                 private router: Router,
                 private dsservice: DataStorageService,
-                private recipeService: RecipeService){
+                private recipeService: RecipeService,
+                private store: Store<fromApp.AppState>){
 
+    }
+    ngOnInit(): void {
+        this.store.select('auth').subscribe(authState => {
+            this.isLoading = authState.loading; // updating UI based on correct state in our NgRx store
+            this.error = authState.authError;
+        });
     }
 
     onSwitchMode(){
@@ -36,27 +46,30 @@ export class AuthComponent{
         const password = form.value.password;
         let authObs: Observable<AuthResponseData>;
         if(this.isLoginMode){
-            authObs = this.authService.login(email, password); //accessing login method of authService component and subscribing to it later
+            //authObs = this.authService.login(email, password); 
+            this.store.dispatch(new AuthActions.LoginStart({email: email, password: password}));
         }
         else{
-            authObs = this.authService.signup(email, password);// accessing signup mehod of authService component 
-        }
-        authObs.subscribe(
-            resData=>{
-                console.log(resData);
-                this.isLoading=false;
-                this.router.navigate(['/recipes']);
-            },errorRes=>{
-                console.log(errorRes);
-                this.error = errorRes; // subscribing to error message from authService class
-                this.isLoading=false;
-            });
-        this.dsservice.fetchRecipes() //subscribing to observable/event emitted by data storage service and storing recipes array here in allRecipes array
+            authObs = this.authService.signup(email, password);
+        }   
+   
+
+        // authObs.subscribe(
+        //     resData=>{
+        //         console.log(resData);
+        //         this.isLoading=false;
+        //         this.router.navigate(['/recipes']);
+        //     },errorRes=>{
+        //         console.log(errorRes);
+        //         this.error = errorRes; // subscribing to error message from authService class
+        //         this.isLoading=false;
+        //     });
+        this.dsservice.fetchRecipes()
         .subscribe(
           (recipes)=>
             {
               this.allRecipes = recipes;
-              this.recipeService.setRecipes(this.allRecipes); // calling setRecipes method of recipeService and passing this allRecipes array as parameter
+              this.recipeService.setRecipes(this.allRecipes);
             });
         form.reset();
     }

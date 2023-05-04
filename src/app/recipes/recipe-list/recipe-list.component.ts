@@ -27,11 +27,12 @@ export class RecipeListComponent implements OnInit {
         }
       );
     // this.recipes = this.recipeService.getRecipes();
+    // to fetch recipe automatically during every CDC
     this.dsservice.fetchRecipes().subscribe(
       (recipes)=>
         {
           this.recipes = recipes;
-          this.recipeService.setRecipes(this.recipes); // calling setRecipes method of recipeService and passing this allRecipes array as parameter
+          this.recipeService.setRecipes(this.recipes); 
         });
   }
   // onRecipeSelected(recipe: Recipe){
